@@ -55,10 +55,6 @@ def main():
         except ModuleNotFoundError:
             logger.bind(end="").warning("playsound doesn't found. Are you want to install? (Y/n) - ")
             if input("").lower() in ['', 'y']:
-                if "pip" not in modules:
-                    logger.error("Pip not found")
-                    exit(-1)
-
                 logger.info("Installing playsound")
                 from subprocess import Popen, PIPE
                 _proc = Popen(
@@ -70,6 +66,9 @@ def main():
                 _proc.wait()
                 if _proc.returncode == 0:
                     logger.info("Playsound installed successfully")
+                if _proc.returncode == 127:
+                    logger.error("Pip not found")
+                    exit(-1)
                 else:
                     logger.error("Error installing playsound. Try to install manually")
                     exit(-1)
