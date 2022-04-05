@@ -1,3 +1,4 @@
+from cmath import log
 import os
 import sys
 import requests
@@ -31,6 +32,10 @@ def main():
 
     rq = requests.get(API_LINK.format(text=text))
     
+    if rq.status_code == 500:
+        logger.error("API blocked your IP ¯\_(ツ)_/¯")
+        exit(-1)
+        
     if rq.status_code != 200:
         logger.error(f'Error while making api request (code: {rq.status_code})')
         exit(-1)
