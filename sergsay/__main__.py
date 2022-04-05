@@ -1,85 +1,63 @@
-from typing import Tuple
-from requests import get
+import os
+import sys
+import requests
 from loguru import logger
-from os import close, remove
-from sys import stdout, executable, modules
+from tempfile import mkstemp
+from playsound import playsound
+from argparse import ArgumentParser
 
 
-# emulate print("abc", end="")
-def formatter(record):
-    end = record["extra"].get("end", "\n")
-    return "<green>{time:YYYY-MM-DD HH:mm:ss}</green> <red>|</red> <cyan>{level}</cyan> <red>|</red> <bold>{message}</bold>" + end
-
-
-logger.remove()
-logger.add(stdout, format=formatter)
+LOG_FORMAT = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> <red>|</red> <cyan>{level}</cyan> <red>|</red> <bold>{message}</bold>"
 API_LINK = "https://nextup.com/ivona/php/nextup-polly/CreateSpeech/CreateSpeechGet3.php?voice=Maxim&language=ru-RU&text={text}"
 
-
-def _api_request(text: str) -> Tuple[int, str]:
-    _req = get(API_LINK.format(text=text))
-    return _req.status_code, _req.content.decode('utf-8')
+logger.remove()
+logger.add(sys.stdout, format=LOG_FORMAT)
 
 
 def main():
-    from argparse import ArgumentParser
     parser = ArgumentParser()
     parser.add_argument("-t", "--text", required=True, help="Text in quotes")
     parser.add_argument("-s", "--save", default=None, help="Save audiofile to <path>")
     parser.add_argument("-p", "--play", default=None, action="store_true", help="Play sound")
     args = parser.parse_args()
-    del ArgumentParser, parser
+    
+    text = args.text.strip()
 
-    logger.info("Making API request")
-    exit_code, link = _api_request(args.text)
-    if exit_code != 200:
-        logger.error(f'Error while making api request (code: {exit_code}): {link}')
+    if not text:
+        logger.error("No text")
         exit(-1)
+
+    logger.info("Making API request")   
+
+    rq = requests.get(API_LINK.format(text=text))
+    
+    if rq.status_code != 200:
+        logger.error(f'Error while making api request (code: {rq.status_code})')
+        exit(-1)
+
     logger.info("Api request successful")
-    logger.info(f"Link to sound: {link}")
+    logger.info(f"Link to sound: {rq.text}")
 
     if args.save or args.play:
-        file_content = get(link, stream=True).content
+        file_content = requests.get(rq.text, stream=True).content
 
     if args.save:
-        # logger.info("Saving")
-        with open(args.save, "wb") as _sound_file:
+        logger.info("Saving")
+        with open(str(args.save.strip()) + ".mp3", "wb") as _sound_file:
             _sound_file.write(file_content)
 
-        logger.info(f"Sound saved to {args.save}")
+        logger.info(f"Sound saved to {args.save.strip()}.mp3")
 
     if args.play:
-        from tempfile import mkstemp
-        try:
-            from playsound import playsound
-        except ModuleNotFoundError:
-            logger.bind(end="").warning("playsound doesn't found. Are you want to install? (Y/n) - ")
-            if input("").lower() in ['', 'y']:
-                logger.info("Installing playsound")
-                from subprocess import Popen, PIPE
-                _proc = Popen(
-                    [executable, '-m', 'pip', 'install', 'playsound'],
-                    stdout=PIPE,
-                    stderr=PIPE
-                )
-                del Popen, PIPE
-                _proc.wait()
-                if _proc.returncode == 0:
-                    logger.info("Playsound installed successfully")
-                if _proc.returncode == 127:
-                    logger.error("Pip not found")
-                    exit(-1)
-                else:
-                    logger.error("Error installing playsound. Try to install manually")
-                    exit(-1)
-
         fd, tempPath = mkstemp(prefix='PS', suffix=".mp3")
+
         with open(tempPath, "wb") as _tempfile:
             _tempfile.write(file_content)
-        close(fd)
+
         logger.info("Playing")
         playsound(tempPath)
-        remove(tempPath)
+        os.close(fd)
+        os.remove(tempPath)
 
 
 if __name__ == '__main__':
